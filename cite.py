@@ -36,6 +36,17 @@ To explore:
   - glossary of terms?    
   - appling a particular csl style to bibliography
   - docopt for command line interface?
+  
+Todo:
+  - original suggestion for --from-file flag as in https://github.com/manubot/manubot/issues/135
+  - maybe all three of '--from-file, stdin, or an argparse hack'
+  
+Target usecase: 
+    
+   - a user keeps a list of searchable references in references.txt (doi, pmid, isbn, etc)
+   - a user keeps a list of manual (not searchable) references as a YAML (or JSON) file in references-manual.txt
+   - a user can produce a bibliography list with manubot cite in different formats
+
     
 """
 
@@ -124,7 +135,7 @@ def add_missing_ids(csl_list):
     return csl_list                   
   
     
-def to_metadata(csl_list, csl_style=None):
+def to_metadata(csl_list, csl_style):
     pandoc_metadata = {
         'nocite': '@*',
         'references': csl_list,
@@ -155,6 +166,18 @@ def call_pandoc(input_str: str):
                           input=input_str.encode(),                             
                           capture_output=True)
 
+   
+def bibliography(csl_list, csl_style=None):
+    csl_list = add_missing_ids([minimal(ci) for ci in csl_list])
+    input_str = to_metadata(csl_list, csl_style)
+    output = call_pandoc(input_str)
+    if output.returncode == 0:
+        message = output.stdout
+    else:
+        message = output.stderr        
+    return message.decode()
+        
+
 if __name__ == '__main__':    
     d1 = DOI('10.18632/aging.101684') 
     d2 = DOI('10.3982/ECTA14673')
@@ -175,10 +198,10 @@ if __name__ == '__main__':
                             'и инфра-красной области спектра')    
     
     csl_list1 = [minimal(ci) for ci in [ci1, ci2, ci3, ci4, ci5]]
-    assert to_metadata(csl_list1).startswith("---")
-    assert to_metadata(csl_list1).endswith("...\n")      
+    assert to_metadata(csl_list1, csl_style=None).startswith("---")
+    assert to_metadata(csl_list1, csl_style=None).endswith("...\n")      
     
-    input_str1=to_metadata(add_missing_ids(csl_list1))
+    input_str1=to_metadata(add_missing_ids(csl_list1), csl_style=None)
     k = call_pandoc(input_str1)
     assert k.stderr.decode() == ''
     assert k.stdout.decode().replace('\r\n', '\n') == \
@@ -222,3 +245,9 @@ WATSON, J. D., and F. H. C. CRICK. 1953. “Molecular Structure of Nucleic Acids
       language: en-GB
     ...
     """
+    d1 = DOI('10.1038/171737a0') # Watson Crick
+    d2 = DOI('10.1038/scientificamerican0490-56') # Kary Mullis PCR    
+    csl_list = [d.retrieve() for d in [d1, d2]]
+    bib_text = bibliography(csl_list)
+    print(bib_text)
+    
