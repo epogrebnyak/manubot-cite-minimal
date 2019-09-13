@@ -2,6 +2,41 @@
 This is a study of core functionality of 'manubot cite'.
 
 https://github.com/manubot/manubot/blob/master/manubot/cite
+
+Simplifications:
+    
+  - just DOI citekey
+  - rough cleaning of csl_item - few fields used, see minimal()
+  - no additions of user-defined csl items 
+  - no csl style for 
+  
+Things learned - CSL related:
+    
+  - CSL output of Crossref is too dirty for pandoc citeproc, must be 
+    cleaned out
+  - pandoc-citeproc needs id's to generate bibliography list, even with 
+    'nocite': '@*'
+  - Uspekhi Fizicheskih Nauk has articles from first issue in 1918 online!
+    with DOI references!  
+    
+Things learned - implementation:
+
+  - requests_cache.install_cache() is an option for reuqests caching,
+    optimal expiration period of cache to be decided, maybe should be in days
+  - console encoding can matter for python subprocess.run(), eg it is 866  
+    for Windows in Russia locale
+  - UserDict is not JSON-serialisable with json.dump()
+    
+To explore:
+    
+  - a fit of Citation, DOI, CitationItem classes
+  - maybe server calls should not be in DOI class (it becomes a big machinery
+    in other citation classes)
+  - convert asserts to unit tests + how to test on Windows? Github actions?  
+  - glossary of terms?    
+  - appling a particular csl style to bibliography
+  - docopt for command line interface?
+    
 """
 
 from datetime import timedelta
@@ -13,7 +48,9 @@ import logging
 import requests
 import requests_cache
 
+
 requests_cache.install_cache(expire_after=timedelta(hours=1))
+
 
 def get_manubot_user_agent():
     """
@@ -97,7 +134,7 @@ def to_metadata(csl_list, csl_style=None):
     return '---\n{yaml}\n...\n'.format(
         yaml=json.dumps(pandoc_metadata, ensure_ascii=False, indent=2)
     )
-
+    
 
 def call_pandoc_help():
     args = [
@@ -118,37 +155,33 @@ def call_pandoc(input_str: str):
                           input=input_str.encode(),                             
                           capture_output=True)
 
-
-d1 = DOI('10.18632/aging.101684') 
-d2 = DOI('10.3982/ECTA14673')
-d3 = DOI('10.1017/aae.2017.13')
-d4 = DOI('10.1038/171737a0')
-d5 = DOI('10.3367/UFNr.0001.191801k.0077')
-
-
-ci1, ci2, ci3, ci4, ci5 = [d.retrieve() for d in [d1, d2, d3, d4, d5]]
-
-
-assert ci1['title'] == ('DNA methylation GrimAge strongly predicts '
-                        'lifespan and healthspan')
-assert ci2['title'] == 'Preferences for Truth‐Telling'
-assert ci3['title'] == ('RESEARCH, PRODUCTIVITY, AND OUTPUT GROWTH '
-                        'IN U.S. AGRICULTURE')
-assert ci4['container-title'] == 'Nature'
-# God, this is so cool: 1918 Uspekhi Fizicheskih Nauk article!
-assert ci5['title'] == ('Изслѣдованiя и опредѣленiя длинъ волнъ въ красной '
-                        'и инфра-красной области спектра')
-
-
-csl_list1 = [minimal(ci) for ci in [ci1, ci2, ci3, ci4, ci5]]
-assert to_metadata(csl_list1).startswith("---")
-assert to_metadata(csl_list1).endswith("...\n")
-  
-
-input_str1=to_metadata(add_missing_ids(csl_list1))
-k = call_pandoc(input_str1)
-assert k.stderr.decode() == ''
-assert k.stdout.decode().replace('\r\n', '\n') == \
+if __name__ == '__main__':    
+    d1 = DOI('10.18632/aging.101684') 
+    d2 = DOI('10.3982/ECTA14673')
+    d3 = DOI('10.1017/aae.2017.13')
+    d4 = DOI('10.1038/171737a0')
+    d5 = DOI('10.3367/UFNr.0001.191801k.0077')    
+    
+    ci1, ci2, ci3, ci4, ci5 = [d.retrieve() for d in [d1, d2, d3, d4, d5]]    
+    
+    assert ci1['title'] == ('DNA methylation GrimAge strongly predicts '
+                            'lifespan and healthspan')
+    assert ci2['title'] == 'Preferences for Truth‐Telling'
+    assert ci3['title'] == ('RESEARCH, PRODUCTIVITY, AND OUTPUT GROWTH '
+                            'IN U.S. AGRICULTURE')
+    assert ci4['container-title'] == 'Nature'
+    # God, this is so cool: 1918 Uspekhi Fizicheskih Nauk article!
+    assert ci5['title'] == ('Изслѣдованiя и опредѣленiя длинъ волнъ въ красной '
+                            'и инфра-красной области спектра')    
+    
+    csl_list1 = [minimal(ci) for ci in [ci1, ci2, ci3, ci4, ci5]]
+    assert to_metadata(csl_list1).startswith("---")
+    assert to_metadata(csl_list1).endswith("...\n")      
+    
+    input_str1=to_metadata(add_missing_ids(csl_list1))
+    k = call_pandoc(input_str1)
+    assert k.stderr.decode() == ''
+    assert k.stdout.decode().replace('\r\n', '\n') == \
 """Abeler, Johannes, Daniele Nosenzo, and Collin Raymond. 2019. “Preferences for Truth‐Telling.” _Econometrica_ 87 (4): 1115–53. https://doi.org/10.3982/ecta14673.
 
 FUGLIE, KEITH, MATTHEW CLANCY, PAUL HEISEY, and JAMES MACDONALD. 2017. “RESEARCH, PRODUCTIVITY, AND OUTPUT GROWTH IN U.S. AGRICULTURE.” _Journal of Agricultural and Applied Economics_ 49 (4): 514–54. https://doi.org/10.1017/aae.2017.13.
@@ -159,33 +192,33 @@ Vavilov, S.I. 1918. “Изслѣдованiя и опредѣленiя длин
 
 WATSON, J. D., and F. H. C. CRICK. 1953. “Molecular Structure of Nucleic Acids: A Structure for Deoxyribose Nucleic Acid.” _Nature_ 171 (4356): 737–38. https://doi.org/10.1038/171737a0.
 """
-
-meta1 = """
----
-nocite: |
-  @*
-references:
-- type: article-journal
-  id: WatsonCrick1953
-  author:
-  - family: Watson
-    given: J. D.
-  - family: Crick
-    given: F. H. C.
-  issued:
-    date-parts:
-    - - 1953
-      - 4
-      - 25
-  title: 'Molecular structure of nucleic acids: a structure for deoxyribose
-    nucleic acid'
-  title-short: Molecular structure of nucleic acids
-  container-title: Nature
-  volume: 171
-  issue: 4356
-  page: 737-738
-  DOI: 10.1038/171737a0
-  URL: http://www.nature.com/nature/journal/v171/n4356/abs/171737a0.html
-  language: en-GB
-...
-"""
+    
+    meta1 = """
+    ---
+    nocite: |
+      @*
+    references:
+    - type: article-journal
+      id: WatsonCrick1953
+      author:
+      - family: Watson
+        given: J. D.
+      - family: Crick
+        given: F. H. C.
+      issued:
+        date-parts:
+        - - 1953
+          - 4
+          - 25
+      title: 'Molecular structure of nucleic acids: a structure for deoxyribose
+        nucleic acid'
+      title-short: Molecular structure of nucleic acids
+      container-title: Nature
+      volume: 171
+      issue: 4356
+      page: 737-738
+      DOI: 10.1038/171737a0
+      URL: http://www.nature.com/nature/journal/v171/n4356/abs/171737a0.html
+      language: en-GB
+    ...
+    """
