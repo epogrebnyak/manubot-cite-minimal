@@ -6,6 +6,7 @@ https://github.com/manubot/manubot/blob/master/manubot/cite
 Simplifications:
     
   - just DOI citekey
+  - no ShortDOI
   - rough cleaning of csl_item - few fields used, see minimal()
   - no additions of user-defined csl items 
   - no csl style for 
@@ -19,9 +20,9 @@ Things learned - CSL related:
   - Uspekhi Fizicheskih Nauk has articles from first issue in 1918 online!
     with DOI references!  
     
-Things learned - implementation:
+Things learned - other implementation:
 
-  - requests_cache.install_cache() is an option for reuqests caching,
+  - requests_cache.install_cache() is an option for requests caching,
     optimal expiration period of cache to be decided, maybe should be in days
   - console encoding can matter for python subprocess.run(), eg it is 866  
     for Windows in Russia locale
@@ -168,6 +169,10 @@ def call_pandoc(input_str: str):
 
    
 def bibliography(csl_list, csl_style=None):
+    try:
+        csl_list[0]
+    except (TypeError, IndexError):
+        csl_list = [csl_list]
     csl_list = add_missing_ids([minimal(ci) for ci in csl_list])
     input_str = to_metadata(csl_list, csl_style)
     output = call_pandoc(input_str)
@@ -245,9 +250,32 @@ WATSON, J. D., and F. H. C. CRICK. 1953. “Molecular Structure of Nucleic Acids
       language: en-GB
     ...
     """
+    text = """
+    [@doi:10.1038/171737a0]
+    [@10/ccg94v]
+    """
     d1 = DOI('10.1038/171737a0') # Watson Crick
-    d2 = DOI('10.1038/scientificamerican0490-56') # Kary Mullis PCR    
+    d2 = DOI('10/ccg94v') # Kary Mullis PCR    
     csl_list = [d.retrieve() for d in [d1, d2]]
-    bib_text = bibliography(csl_list)
-    print(bib_text)
+    output = bibliography(csl_list, csl_style=None)
+    print(output)
     
+    """
+    str -> Citation (raw) -> Citation (standard) -> CSL_Item (raw) ->
+           CSL_Item (with id, brushed)-> csl_style -> str
+    ```
+    The cite key journey:
+    - from string we can extract citekeys which follow source:identifier pattern
+    - source:identifier becomes an instance of DOI(identifier), ISBN(identifier), 
+      etc, collectively referered as 'citations' 
+    - DOI, ISBN, etc can be normalised (eg short DOI becomes regular DOI)  
+    - from citation we can get bibliographic information - retrieve() method
+      returns a `CitationItem` dictionary csl_item       
+    - the citation item is refined (add id, purge fileds not accepts by 
+      pandoc-citeproc, etc)
+    - with optional csl_style and format we get a string of bibliography 
+    
+    
+    
+    @doi:10/ccg94v	doi:10/ccg94v	doi:10.1038/scientificamerican0490-56	1GSTJk5bl
+    """
