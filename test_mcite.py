@@ -1,3 +1,20 @@
+def test_ouputs():
+    d1 = DOI('10.1038/171737a0')  # Watson Crick on DNA
+    d2 = DOI('10/ccg94v')  # Kary Mullis on PCR
+    csl_list = [d.retrieve() for d in [d1, d2]]
+    output = bibliography(csl_list, csl_style=None)
+    print(output)
+
+    text1 = "[@doi:10.1038/171737a0], [@doi:10/ccg94v]"
+    output1 = from_manuscript(text1, csl_style=None)
+    assert output == output1
+
+    text2 = """doi:10.1038/171737a0
+    doi:10/ccg94v"""
+    output2 = from_listing(text2, csl_style=None)
+    assert output == output2
+
+
 def test_doi_1(): # not run
     citekey = 'doi:'
     csl_item = DOI('10.7287/peerj.preprints.3100v1').retrieve

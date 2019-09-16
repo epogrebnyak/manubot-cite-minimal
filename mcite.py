@@ -9,7 +9,8 @@ Simplifications:
   - rough cleaning of csl_item - few fields used, see minimal()
   - no additions of user-defined csl items
   - no csl style for output
-  - not output format
+  - no --output, just writing to stdout (will not produce MS Word) 
+
 
 Things learned - CSL related:
 
@@ -41,8 +42,6 @@ Target usecase:
    - a user keeps a list of searchable references in references.txt (doi, pmid, isbn, etc)
    - a user keeps a list of manual (not searchable) references as a YAML (or JSON) file in references-manual.txt
    - a user can produce a bibliography list with manubot cite in different formats
-
-
 """
 import sys
 import platform
@@ -53,6 +52,7 @@ import re
 import json
 import subprocess
 import logging
+from docopt import docopt
 
 import requests
 import requests_cache
@@ -60,7 +60,6 @@ import requests_cache
 __VERSION__ = '0.2.3'
 
 requests_cache.install_cache(expire_after=timedelta(hours=1))
-
 
 def version():
     return __VERSION__
@@ -92,10 +91,10 @@ def server_response(url, header, user_agent=get_manubot_user_agent()):
 @dataclass
 class CiteKey:
     source: str
-    identifier: str
+    identifier: str   
 
     def citation(self):
-        lookup = dict(doi=DOI, isbn=ISBN, pmid=PMID, arxiv=Arxiv)  # incomplete
+        lookup = dict(doi=DOI, isbn=ISBN, pmid=PMID, arxiv=Arxiv)  # FIXME: incomplete
         return lookup[self.source](self.identifier)
 
 
@@ -106,11 +105,14 @@ CITEKEY_PATTERN2 = re.compile(
     r'(?<!\w)([a-zA-Z0-9][\w:.#$%&\-+?<>~/]*[a-zA-Z0-9/])')
 
 
+def extract_one_citekey(s: str):
+    return CiteKey(*s.split(':', 1)) 
+
+
 def extract_citekeys(text: str):
-    citekeys_strings = CITEKEY_PATTERN.findall(text)
-    return [CiteKey(*s.split(':', 1)) for s in citekeys_strings]
+    return [extract_one_citekey(s) for s in CITEKEY_PATTERN.findall(text)]
 
-
+# FIXME:
 def extract_citekeys_without_at(text: str):
     citekeys_strings = CITEKEY_PATTERN2.findall(text)
     return [CiteKey(*s.split(':', 1)) for s in citekeys_strings][0]
@@ -210,12 +212,20 @@ def call_pandoc_help():
     return result.stdout.decode('cp866')
 
 
-def call_pandoc(input_str: str):
+arg_converter = dict(markdown=['--to', 'markdown_strict', '--wrap', 'none'],
+                     jats=['--to', 'jats', '--standalone'],
+                     docx=['--to', 'docx'],
+                     html=['--to', 'html'],
+                     plain=['--to', 'plain', '--wrap', 'none'])
+
+def is_valid_format(output_format):
+    return output_format and (output_format.lower() in arg_converter.keys())
+
+def call_pandoc(input_str: str, output_format='plain'):
     args = [
         'pandoc',
-        '--filter', 'pandoc-citeproc',
-        '--to', 'plain', '--wrap', 'none'
-    ]
+        '--filter', 'pandoc-citeproc']
+    args.extend(arg_converter[output_format])    
     return subprocess.run(args,
                           input=input_str.encode(),
                           capture_output=True)
@@ -236,46 +246,76 @@ def bibliography(csl_list: List[CiteItem], csl_style=None) -> str:
     return message.decode()
 
 
-def make_csl_list(citekeys: List[CiteKey]) -> List[CiteItem]:
-    csl_list = []
-    for citekey in citekeys:
-        csl_item = citekey.citation() \
+def citekey_to_csl_item(citekey: CiteKey) -> CiteItem:
+    return citekey.citation() \
             .normalise() \
             .retrieve() \
-            .minimal()
-        csl_list.append(csl_item)
-    return csl_list
+            .minimal() 
 
+def text_to_citekeys(text: str):
+    # What kind of input are we processing?
+    # One with @citekeys - a manusript 
+    if not text:
+        return []
+    if '@' in text or ('[' in text and ']' in text):
+        return extract_citekeys(text)
+    # A citekey by line - a listing of references
+    else:
+        xs = text.split("\n")
+        return [extract_citekeys_without_at(x.strip()) for x in xs] # FIXME    
 
-def from_manuscript(text: str, csl_style=None, output_format='plain'):
+def make_csl_list(citekeys):
+    return [citekey_to_csl_item(x) for x in citekeys]
+
+def main(citekeys, csl_style=None, output_format='plain'):
     """Return bibliography list form text with @citekeys."""
-    citekeys = extract_citekeys(text)
     csl_list = make_csl_list(citekeys)
     return bibliography(csl_list, csl_style)
 
+def as_json(csl_list):
+    return json.dumps(csl_list, ensure_ascii=False, indent=2)    
+    
+if __name__ == '__main__':    
+    args = docopt(
+"""
+Usage: mcite.py [--from-file FILE | ARGS...] [--render --format FORMAT] [--debug-args]
+""")
+    if args['FILE']:
+        text = open(args['FILE']).read()
+        citekeys = text_to_citekeys(text)
+    elif args['ARGS']:
+        citekeys = [extract_one_citekey(arg) for arg in args['ARGS']]
+    elif not args['FILE'] and not args['ARGS']:
+        text = sys.stdin.read()
+        citekeys = text_to_citekeys(text)
+    if args['--debug-args']:     
+        for ci in citekeys:
+            print(ci)            
+        sys.exit(0)
+    if args['--render']:
+        fmt = args['--format']    
+        output_format = fmt if is_valid_format(fmt) else 'plain'        
+        print(main(citekeys, 
+                   csl_style=None, 
+                   output_format=output_format))
+    else:
+        print(as_json(make_csl_list(citekeys)))
+        
 
-def from_listing(text: str, csl_style=None, output_format='plain'):
-    """Return bibliography list based on text with a citekey per line
-       wihtout @.
-    """
-    citekeys = [extract_citekeys_without_at(
-        x.strip()) for x in text.split("\n")]
-    csl_list = make_csl_list(citekeys)
-    return bibliography(csl_list, csl_style)
+"""
+D:\github\manubot-cite-minimal (master)
+λ python mcite.py --debug-args < ref.txt
+['doi:10.1038/171737a0', 'doi:10/ccg94v']
 
+D:\github\manubot-cite-minimal (master)
+λ python mcite.py --debug-args doi:10.1038/171737a0 doi:10/ccg94v
+['doi:10.1038/171737a0', 'doi:10/ccg94v']
 
-if __name__ == '__main__':
-    d1 = DOI('10.1038/171737a0')  # Watson Crick on DNA
-    d2 = DOI('10/ccg94v')  # Kary Mullis on PCR
-    csl_list = [d.retrieve() for d in [d1, d2]]
-    output = bibliography(csl_list, csl_style=None)
-    print(output)
+D:\github\manubot-cite-minimal (master)
+λ cat ref.txt | python mcite.py --debug-args
+['doi:10.1038/171737a0', 'doi:10/ccg94v']
 
-    text1 = "[@doi:10.1038/171737a0], [@doi:10/ccg94v]"
-    output1 = from_manuscript(text1, csl_style=None)
-    assert output == output1
-
-    text2 = """doi:10.1038/171737a0
-    doi:10/ccg94v"""
-    output2 = from_listing(text2, csl_style=None)
-    assert output == output2
+D:\github\manubot-cite-minimal (master)
+λ python mcite.py --from-file ref.txt --debug-args
+['doi:10.1038/171737a0', 'doi:10/ccg94v']
+"""  
