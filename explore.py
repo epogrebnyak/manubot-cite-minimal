@@ -108,10 +108,18 @@ class CiteKey:
 CITEKEY_PATTERN = re.compile(
     r'(?<!\w)@([a-zA-Z0-9][\w:.#$%&\-+?<>~/]*[a-zA-Z0-9/])')
 
+CITEKEY_PATTERN2 = re.compile(
+    r'(?<!\w)([a-zA-Z0-9][\w:.#$%&\-+?<>~/]*[a-zA-Z0-9/])')
+
 
 def extract_citekeys(text: str):
     citekeys_strings = CITEKEY_PATTERN.findall(text)
     return [CiteKey(*s.split(':', 1)) for s in citekeys_strings]
+
+
+def extract_citekeys_without_at(text: str):
+    citekeys_strings = CITEKEY_PATTERN2.findall(text)
+    return [CiteKey(*s.split(':', 1)) for s in citekeys_strings][0]
 
 
 regexes = {
@@ -245,6 +253,23 @@ def make_csl_list(citekeys: List[CiteKey]) -> List[CiteItem]:
     return csl_list
 
 
+def from_manuscript(text: str, csl_style=None, output_format='plain'):
+    """Return bibliography list form text with @citekeys."""
+    citekeys = extract_citekeys(text)
+    csl_list = make_csl_list(citekeys)
+    return bibliography(csl_list, csl_style)
+
+
+def from_listing(text: str, csl_style=None, output_format='plain'):
+    """Return bibliography list based on text with a citekey per line
+       wihtout @.
+    """
+    citekeys = [extract_citekeys_without_at(
+        x.strip()) for x in text.split("\n")]
+    csl_list = make_csl_list(citekeys)
+    return bibliography(csl_list, csl_style)
+
+
 def main(text: str, csl_style=None) -> str:
     citekeys = extract_citekeys(text)
     csl_list = make_csl_list(citekeys)
@@ -259,5 +284,10 @@ if __name__ == '__main__':
     print(output)
 
     text1 = "[@doi:10.1038/171737a0], [@doi:10/ccg94v]"
-    output1 = main(text1, csl_style=None)
+    output1 = from_manuscript(text1, csl_style=None)
     assert output == output1
+
+    text2 = """doi:10.1038/171737a0
+    doi:10/ccg94v"""
+    output2 = from_listing(text2, csl_style=None)
+    assert output == output2
