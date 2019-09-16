@@ -6,10 +6,10 @@ https://github.com/manubot/manubot/blob/master/manubot/cite
 Simplifications:
     
   - just DOI citekey
-  - no ShortDOI
   - rough cleaning of csl_item - few fields used, see minimal()
   - no additions of user-defined csl items 
-  - no csl style for 
+  - no csl style for output
+  - not output format
   
 Things learned - CSL related:
     
@@ -26,7 +26,7 @@ Things learned - other implementation:
     optimal expiration period of cache to be decided, maybe should be in days
   - console encoding can matter for python subprocess.run(), eg it is 866  
     for Windows in Russia locale
-  - UserDict is not JSON-serialisable with json.dump()
+  - UserDict() is not JSON-serialisable with json.dump()
     
 To explore:
     
@@ -50,9 +50,12 @@ Target usecase:
 
     
 """
-
+import sys
+import platform
 from datetime import timedelta
 from dataclasses import dataclass
+from typing import List
+import re
 import json
 import subprocess
 import logging
@@ -60,35 +63,75 @@ import logging
 import requests
 import requests_cache
 
+__VERSION__ = '0.2.3'
 
 requests_cache.install_cache(expire_after=timedelta(hours=1))
 
+def version():
+    return __VERSION__
 
 def get_manubot_user_agent():
     """
     Return a User-Agent string for web request headers to help services
     identify requests as coming from Manubot.
     """
-    import sys
-    import platform
     contact_email = 'contact@manubot.org'
-    try:
-        from manubot import __version__ as manubot_version
-    except ImportError:
-        manubot_version = ''
     return (
-        f'manubot/{manubot_version} '
+        f'manubot/{version()} '
         f'({platform.system()}; Python/{sys.version_info.major}.{sys.version_info.minor}) '
         f'<{contact_email}>'
     )
 
 
+def server_response(url, header, user_agent=get_manubot_user_agent()):
+    if user_agent:
+        header['User-Agent'] = get_manubot_user_agent()
+    response = requests.get(url, headers=header)
+    try:
+        return response.json()
+    except Exception as error:
+        logging.error(['Invalid response', response.url, response.text])
+        raise error
+
+@dataclass
+class CiteKey:
+    source: str
+    identifier: str
+    
+    def citation(self):
+        lookup = dict(doi=DOI, isbn=ISBN, pmid=PMID, arxiv=Arxiv) #incomplete
+        return lookup[self.source](self.identifier)
+
+CITEKEY_PATTERN = re.compile(
+    r'(?<!\w)@([a-zA-Z0-9][\w:.#$%&\-+?<>~/]*[a-zA-Z0-9/])')
+
+
+def extract_citekeys(text: str):
+    citekeys_strings = CITEKEY_PATTERN.findall(text)
+    return [CiteKey(*s.split(':', 1)) for s in citekeys_strings]
+
+
+regexes = {
+    'pmid': re.compile(r'[1-9][0-9]{0,7}'),
+    'pmcid': re.compile(r'PMC[0-9]+'),
+    'doi': re.compile(r'10\.[0-9]{4,9}/\S+'),
+    'shortdoi': re.compile(r'10/[a-zA-Z0-9]+'),
+    'wikidata': re.compile(r'Q[0-9]+'),
+}
+
+
 @dataclass
 class Citation:
     identifier: str
+    
+    def normalise(self):
+        return self   
+
+    def response(self):
+        raise NotImplementedError
 
     def retrieve(self):
-        pass
+        raise NotImplementedError
 
 
 class DOI(Citation):    
@@ -96,34 +139,37 @@ class DOI(Citation):
     def url(self):
         return 'https://doi.org/{}'.format(self.identifier)
 
-    @staticmethod 
-    def _response(url):
-        header = {
-            'Accept': 'application/vnd.citationstyles.csl+json',
-            'User-Agent': get_manubot_user_agent(),
-        }
-        response = requests.get(url, headers=header)
-        try:
-            return response.json()
-        except Exception as error:
-            logging.error(['Invalid response', response.url, response.text])
-            raise error
+    def response(self):
+        header = {'Accept': 'application/vnd.citationstyles.csl+json'}
+        return server_response(self.url, header)
     
     def retrieve(self):
-        csl_dict = self._response(self.url)
+        csl_dict = self.response()
         csl_dict['URL'] = self.url
-        return CitationItem(csl_dict)
+        return CiteItem(csl_dict)
 
+class ISBN(Citation):    
+    pass
 
-class CitationItem(dict):
-    def __init__(self, incoming_dict):
-        super().__init__(incoming_dict)
+class PMID(Citation):    
+    pass
 
+class Arxiv(Citation):    
+    pass
+
+class Wikidata(Citation):    
+    pass
     
-def minimal(item: CitationItem):
-   keys = 'title author URL issued type container-title volume issue page DOI'.split()
-   new_dict = {k:v for k,v in item.items() if k in keys}
-   return CitationItem(new_dict)
+
+
+class CiteItem(dict):
+    def __init__(self, incoming_dict):
+        super().__init__(incoming_dict)    
+        
+    def minimal(self):
+       keys = 'title author URL issued type container-title volume issue page DOI'.split()
+       new_dict = {k:v for k,v in self.items() if k in keys}
+       return CiteItem(new_dict)
 
 
 def add_missing_ids(csl_list):
@@ -136,16 +182,15 @@ def add_missing_ids(csl_list):
     return csl_list                   
   
     
-def to_metadata(csl_list, csl_style):
+def to_metadata(csl_list: List[CiteItem], csl_style: str) -> str:
     pandoc_metadata = {
         'nocite': '@*',
         'references': csl_list,
     }    
     if csl_style:
         pandoc_metadata['csl'] = csl_style
-    return '---\n{yaml}\n...\n'.format(
-        yaml=json.dumps(pandoc_metadata, ensure_ascii=False, indent=2)
-    )
+    yaml = json.dumps(pandoc_metadata, ensure_ascii=False, indent=2)    
+    return f'---\n{yaml}\n...\n'
     
 
 def call_pandoc_help():
@@ -168,12 +213,12 @@ def call_pandoc(input_str: str):
                           capture_output=True)
 
    
-def bibliography(csl_list, csl_style=None):
+def bibliography(csl_list: List[CiteItem], csl_style=None) -> str:
     try:
         csl_list[0]
     except (TypeError, IndexError):
         csl_list = [csl_list]
-    csl_list = add_missing_ids([minimal(ci) for ci in csl_list])
+    csl_list = add_missing_ids([ci.minimal() for ci in csl_list])
     input_str = to_metadata(csl_list, csl_style)
     output = call_pandoc(input_str)
     if output.returncode == 0:
@@ -181,6 +226,18 @@ def bibliography(csl_list, csl_style=None):
     else:
         message = output.stderr        
     return message.decode()
+
+
+def main(text: str):
+    csl_list = []
+    for citekey in extract_citekeys(text):
+        csl_item = citekey.citation() \
+                   .normalise() \
+                   .retrieve() \
+                   .minimal()
+        csl_list.append(csl_item)   
+    return bibliography(csl_list)      
+        
         
 
 if __name__ == '__main__':    
@@ -202,7 +259,7 @@ if __name__ == '__main__':
     assert ci5['title'] == ('Изслѣдованiя и опредѣленiя длинъ волнъ въ красной '
                             'и инфра-красной области спектра')    
     
-    csl_list1 = [minimal(ci) for ci in [ci1, ci2, ci3, ci4, ci5]]
+    csl_list1 = [ci.minimal() for ci in [ci1, ci2, ci3, ci4, ci5]]
     assert to_metadata(csl_list1, csl_style=None).startswith("---")
     assert to_metadata(csl_list1, csl_style=None).endswith("...\n")      
     
@@ -226,3 +283,10 @@ WATSON, J. D., and F. H. C. CRICK. 1953. “Molecular Structure of Nucleic Acids
     csl_list = [d.retrieve() for d in [d8, d9]]
     output = bibliography(csl_list, csl_style=None)
     print(output)
+    
+    
+    text1 = "[@doi:10.1038/171737a0], [@doi:10/ccg94v]"
+    print(main(text1))
+    
+    
+    

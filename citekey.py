@@ -27,14 +27,6 @@
 - text
 """
 
-text = """
-[@doi:10.1038/171737a0]
-[@doi:10/ccg94v]
-"""
-
-d1 = DOI('10.1038/171737a0') # Watson Crick DNA
-d2 = DOI('10/ccg94v') # Kary Mullis PCR    
-
 from dataclasses import dataclass
 
 @dataclass
@@ -47,13 +39,10 @@ class Citation:
     identifier: str
 
     def normalise(self):
-        pass
         return self 
 
     def retrieve(self):
-        pass
         return CiteItem({})
-    
     
 class CiteItem(dict):
     def __init__(self, dict_):
@@ -76,6 +65,11 @@ class PMID(Citation):
 
 class Arxiv(Citation):    
     pass
+
+class Wikidata(Citation):    
+    pass
+
+
 
 def extract_citekeys(text: str):
     return [CiteKey('doi', '10.1038/171737a0'),
