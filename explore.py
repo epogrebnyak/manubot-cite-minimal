@@ -228,7 +228,7 @@ def bibliography(csl_list: List[CiteItem], csl_style=None) -> str:
     return message.decode()
 
 
-def main(text: str):
+def main(text: str, csl_style=None) -> str:
     csl_list = []
     for citekey in extract_citekeys(text):
         csl_item = citekey.citation() \
@@ -236,7 +236,7 @@ def main(text: str):
                    .retrieve() \
                    .minimal()
         csl_list.append(csl_item)   
-    return bibliography(csl_list)      
+    return bibliography(csl_list, csl_style)      
         
         
 
