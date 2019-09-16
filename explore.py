@@ -30,15 +30,9 @@ Things learned - other implementation:
 
 To explore:
 
-  - a fit of Citation, DOI, CitationItem classes
-  - maybe server calls should not be in DOI class (it becomes a big machinery
-    in other citation classes)
   - convert asserts to unit tests + how to test on Windows? Github actions?
-  - glossary of terms?
   - appling a particular csl style to bibliography
   - docopt for command line interface?
-
-Todo:
   - original suggestion for --from-file flag as in https://github.com/manubot/manubot/issues/135
   - maybe all three of '--from-file, stdin, or an argparse hack'
 
@@ -266,12 +260,6 @@ def from_listing(text: str, csl_style=None, output_format='plain'):
     """
     citekeys = [extract_citekeys_without_at(
         x.strip()) for x in text.split("\n")]
-    csl_list = make_csl_list(citekeys)
-    return bibliography(csl_list, csl_style)
-
-
-def main(text: str, csl_style=None) -> str:
-    citekeys = extract_citekeys(text)
     csl_list = make_csl_list(citekeys)
     return bibliography(csl_list, csl_style)
 
