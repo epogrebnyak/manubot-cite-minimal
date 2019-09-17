@@ -26,7 +26,8 @@ Things learned - other implementation:
   - requests_cache.install_cache() is an option for requests caching,
     optimal expiration period of cache to be decided, maybe should be in days
   - console encoding can matter for python subprocess.run(), eg it is 866
-    for Windows in Russia locale
+    for Windows in Russia locale, but pandoc output is always
+    utf-8 for stdout. https://pandoc.org/MANUAL.html#character-encoding
   - UserDict() is not JSON-serialisable with json.dump()
 
 To explore:
@@ -209,7 +210,7 @@ def call_pandoc_help():
         '--help',
     ]
     result = subprocess.run(args, shell=True, capture_output=True)
-    return result.stdout.decode('cp866')
+    return result.stdout.decode()
 
 
 arg_converter = dict(markdown=['--to', 'markdown_strict', '--wrap', 'none'],
