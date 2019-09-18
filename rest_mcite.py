@@ -1,3 +1,6 @@
+from mcite import (DOI, to_metadata, bibliography, text_to_citekeys,
+                   add_missing_ids, call_pandoc)
+
 def test_ouputs():
     d1 = DOI('10.1038/171737a0')  # Watson Crick on DNA
     d2 = DOI('10/ccg94v')  # Kary Mullis on PCR
@@ -6,18 +9,17 @@ def test_ouputs():
     print(output)
 
     text1 = "[@doi:10.1038/171737a0], [@doi:10/ccg94v]"
-    output1 = from_manuscript(text1, csl_style=None)
+    output1 = text_to_citekeys(text1, csl_style=None)
     assert output == output1
 
     text2 = """doi:10.1038/171737a0
     doi:10/ccg94v"""
-    output2 = from_listing(text2, csl_style=None)
+    output2 = text_to_citekeys(text2, csl_style=None)
     assert output == output2
 
 
 def test_doi_1(): # not run
-    citekey = 'doi:'
-    csl_item = DOI('10.7287/peerj.preprints.3100v1').retrieve
+    csl_item = DOI('10.7287/peerj.preprints.3100v1').csl_item()
     #assert csl_item['id'] == '11cb5HXoY'
     assert csl_item['URL'] == 'https://doi.org/10.7287/peerj.preprints.3100v1'
     assert csl_item['DOI'] == '10.7287/peerj.preprints.3100v1'
@@ -34,7 +36,7 @@ def test_doi_2(): # not run
     d4 = DOI('10.1038/171737a0')
     d5 = DOI('10.3367/UFNr.0001.191801k.0077')
 
-    ci1, ci2, ci3, ci4, ci5 = [d.retrieve() for d in [d1, d2, d3, d4, d5]]
+    ci1, ci2, ci3, ci4, ci5 = [d.csl_item() for d in [d1, d2, d3, d4, d5]]
 
     assert ci1['title'] == ('DNA methylation GrimAge strongly predicts '
                             'lifespan and healthspan')

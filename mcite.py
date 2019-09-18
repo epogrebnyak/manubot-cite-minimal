@@ -45,8 +45,6 @@ Target usecase:
    - a user can produce a bibliography list with manubot cite in different formats
 """
 import sys
-import platform
-from datetime import timedelta
 from dataclasses import dataclass
 from typing import List
 import re
@@ -55,49 +53,8 @@ import subprocess
 import logging
 from docopt import docopt
 
-import requests
-import requests_cache
-
-__VERSION__ = '0.2.3'
-
-requests_cache.install_cache(expire_after=timedelta(hours=1))
-
-def version():
-    return __VERSION__
-
-
-def get_manubot_user_agent():
-    """
-    Return a User-Agent string for web request headers to help services
-    identify requests as coming from Manubot.
-    """
-    contact_email = 'contact@manubot.org'
-    return (
-        f'manubot/{version()} '
-        f'({platform.system()}; Python/{sys.version_info.major}.{sys.version_info.minor}) '
-        f'<{contact_email}>')
-
-
-def server_response(url, header, user_agent=get_manubot_user_agent()):
-    if user_agent:
-        header['User-Agent'] = get_manubot_user_agent()
-    response = requests.get(url, headers=header)
-    try:
-        return response.json()
-    except Exception as error:
-        logging.error(['Invalid response', response.url, response.text])
-        raise error
-
-
-@dataclass
-class CiteKey:
-    source: str
-    identifier: str   
-
-    def citation(self):
-        lookup = dict(doi=DOI, isbn=ISBN, pmid=PMID, arxiv=Arxiv)  # FIXME: incomplete
-        return lookup[self.source](self.identifier)
-
+from citekey import accept
+from server import server_response
 
 CITEKEY_PATTERN = re.compile(
     r'(?<!\w)@([a-zA-Z0-9][\w:.#$%&\-+?<>~/]*[a-zA-Z0-9/])')
@@ -106,17 +63,13 @@ CITEKEY_PATTERN2 = re.compile(
     r'(?<!\w)([a-zA-Z0-9][\w:.#$%&\-+?<>~/]*[a-zA-Z0-9/])')
 
 
-def extract_one_citekey(s: str):
-    return CiteKey(*s.split(':', 1)) 
-
-
 def extract_citekeys(text: str):
-    return [extract_one_citekey(s) for s in CITEKEY_PATTERN.findall(text)]
+    return [accept(s) for s in CITEKEY_PATTERN.findall(text)]
 
 # FIXME:
 def extract_citekeys_without_at(text: str):
     citekeys_strings = CITEKEY_PATTERN2.findall(text)
-    return [CiteKey(*s.split(':', 1)) for s in citekeys_strings][0]
+    return [accept(s) for s in citekeys_strings][0]
 
 
 regexes = {
@@ -128,59 +81,12 @@ regexes = {
 }
 
 
-@dataclass
-class Citation:
-    identifier: str
-
-    def normalise(self):
-        return self
-
-    def response(self):
-        raise NotImplementedError
-
-    def retrieve(self):
-        raise NotImplementedError
-
-
-class DOI(Citation):
-    @property
-    def url(self):
-        return 'https://doi.org/{}'.format(self.identifier)
-
-    def response(self):
-        header = {'Accept': 'application/vnd.citationstyles.csl+json'}
-        return server_response(self.url, header)
-
-    def retrieve(self):
-        csl_dict = self.response()
-        csl_dict['URL'] = self.url
-        return CiteItem(csl_dict)
-
-
-class ISBN(Citation):
-    pass
-
-
-class PMID(Citation):
-    pass
-
-
-class Arxiv(Citation):
-    pass
-
-
-class Wikidata(Citation):
-    pass
-
 
 class CiteItem(dict):
     def __init__(self, incoming_dict):
         super().__init__(incoming_dict)
 
-    def minimal(self):
-        keys = 'title author URL issued type container-title volume issue page DOI'.split()
-        new_dict = {k: v for k, v in self.items() if k in keys}
-        return CiteItem(new_dict)
+
 
 
 def add_missing_ids(csl_list):
@@ -233,10 +139,8 @@ def call_pandoc(input_str: str, output_format='plain'):
 
 
 def bibliography(csl_list: List[CiteItem], csl_style=None) -> str:
-    try:
-        csl_list[0]
-    except (TypeError, IndexError):
-        csl_list = [csl_list]
+    if not isinstance(csl_list, list): 
+       raise TypeError(csl_list)
     csl_list = add_missing_ids([ci.minimal() for ci in csl_list])
     input_str = to_metadata(csl_list, csl_style)
     output = call_pandoc(input_str)
