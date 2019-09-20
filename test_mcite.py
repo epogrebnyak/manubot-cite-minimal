@@ -19,7 +19,7 @@ def test_process_text_to_bibliography():
     assert output == output2
 
 
-def test_doi_1():  # not run
+def test_doi_1(): 
     csl_item = DOI('10.7287/peerj.preprints.3100v1').csl_dict()
     assert csl_item['URL'] == 'https://doi.org/b9s6'
     assert csl_item['DOI'] == '10.7287/peerj.preprints.3100v1'
@@ -30,7 +30,7 @@ def test_doi_1():  # not run
     assert authors[-1]['family'] == 'Greene'
 
 
-def test_doi_2():  # not run
+def test_doi_2():  
     d1 = DOI('10.18632/aging.101684')
     d2 = DOI('10.3982/ECTA14673')
     d3 = DOI('10.1017/aae.2017.13')
@@ -46,7 +46,7 @@ def test_doi_2():  # not run
                             'IN U.S. AGRICULTURE')
     assert ci4['container-title'] == 'Nature'
 
-    # God, this is so cool: 1918 Uspekhi Fizicheskih Nauk article!
+    # This is so cool: 1918 Uspekhi Fizicheskih Nauk article!
     assert ci5['title'] == (
         'Изслѣдованiя и опредѣленiя длинъ волнъ въ красной '
         'и инфра-красной области спектра')
