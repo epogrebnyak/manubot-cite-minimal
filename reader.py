@@ -3,19 +3,20 @@ import re
 CITEKEY_PATTERN = re.compile(
     r'(?<!\w)@([a-zA-Z0-9][\w:.#$%&\-+?<>~/]*[a-zA-Z0-9/])')
 
-CITEKEY_PATTERN2 = re.compile(
-    r'(?<!\w)([a-zA-Z0-9][\w:.#$%&\-+?<>~/]*[a-zA-Z0-9/])')
-
 
 def extract_citekeys(text: str):
+    """Requires @ for citation."""
     return [s for s in CITEKEY_PATTERN.findall(text)]
 
-# FIXME:
 
-
-def extract_citekeys_without_at(text: str):
-    citekeys_strings = CITEKEY_PATTERN2.findall(text)
-    return [s for s in citekeys_strings][0]
+def extract_citekeys_by_line(text: str):
+    result = []
+    for line in text.split('\n'):
+        line.strip()
+        # very permissive - allow everything with a colon to be evaluated
+        if ':' in line:
+            result.append(line)
+    return result        
 
 
 def text_to_citekey_strings(text: str):
@@ -23,12 +24,11 @@ def text_to_citekey_strings(text: str):
         return []
     # What kind of input are we processing?
     if '@' in text:
-        # One with @citekeys - a manusript
+        # Input with @citekeys - a manusript
         return extract_citekeys(text)
     else:
-        # A citekey by line - a listing of references
-        xs = [x.strip() for x in text.split("\n")]
-        return [extract_citekeys_without_at(x.strip()) for x in xs]
+        # A citekey by line - a listing of references        
+        return extract_citekeys_by_line(text)
 
 
 regexes = {

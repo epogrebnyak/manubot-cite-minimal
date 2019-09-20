@@ -38,7 +38,7 @@ import subprocess
 
 from docopt import docopt
 
-from citekey import CSL_Dict  # for function signatures
+from citekey import CiteKey, Handle, CSL_Dict
 from citekey import citekey_to_csl_item
 from reader import text_to_citekey_strings
 
@@ -106,10 +106,16 @@ def add_missing_ids(csl_list):  # will be replaced by .generate_id()
     return csl_list
 
 
-def bibliography(csl_list: List[CSL_Dict], csl_style=None) -> str:
-    if not isinstance(csl_list, list):
-        raise TypeError(csl_list)
-    csl_list = add_missing_ids([ci.minimal() for ci in csl_list])
+def make_csl_list(handles):
+    csl_list = [handle.canonic().csl_dict().clean().minimal() for handle in handles]
+    return add_missing_ids(csl_list)
+
+def bibliography(handles: List[Handle], csl_style=None) -> str:
+    csl_list = make_csl_list(handles)
+    return bibliography_csl(csl_list, csl_style)
+
+
+def bibliography_csl(csl_list: List[CSL_Dict], csl_style):
     input_str = to_metadata(csl_list, csl_style)
     output = call_pandoc(input_str)
     if output.returncode == 0:
@@ -128,8 +134,8 @@ def main(citekey_strings, csl_style=None, output_format='plain'):
     """
     Return bibliography list form text with @citekeys or citekeys without @.
     """
-    csl_list = [citekey_to_csl_item(x) for x in citekey_strings]
-    return bibliography(csl_list, csl_style)
+    handles = [CiteKey(c).handle() for c in citekey_strings]
+    return bibliography(handles, csl_style)
 
 
 def as_json(csl_list):

@@ -1,0 +1,1 @@
+- too much coupling with manubot procees, eg for reading the input 
