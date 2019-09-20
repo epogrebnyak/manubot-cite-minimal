@@ -66,22 +66,27 @@ def to_metadata(csl_list: List[CSL_Dict], csl_style: str) -> str:
     return f'---\n{yaml}\n...\n'
 
 
-arg_converter = dict(markdown=['--to', 'markdown_strict', '--wrap', 'none'],
-                     jats=['--to', 'jats', '--standalone'],
-                     docx=['--to', 'docx'],
-                     html=['--to', 'html'],
-                     plain=['--to', 'plain', '--wrap', 'none'])
+def convert_output_format_arg(output_format):
+    arg_converter = dict(markdown=['--to', 'markdown_strict', '--wrap', 'none'],
+                         jats=['--to', 'jats', '--standalone'],
+                         docx=['--to', 'docx'],
+                         html=['--to', 'html'],
+                         plain=['--to', 'plain', '--wrap', 'none'])
+    return arg_converter[output_format]
 
 
 def is_valid_format(output_format):
-    return output_format and (output_format.lower() in arg_converter.keys())
-
+    try:
+        convert_output_format_arg(output_format.lower())
+        return True
+    except KeyError:
+        return False
 
 def call_pandoc(input_str: str, output_format='plain'):
     args = [
         'pandoc',
         '--filter', 'pandoc-citeproc']
-    args.extend(arg_converter[output_format])
+    args.extend(convert_output_format_arg(output_format))
     return subprocess.run(args,
                           input=input_str.encode(),
                           capture_output=True)
@@ -96,7 +101,7 @@ def call_pandoc_help():
     return result.stdout.decode()
 
 
-def add_missing_ids(csl_list):  # will be replaced by .generate_id()
+def add_missing_ids(csl_list):  # TODO: will be replaced by .generate_id()
     for i, item in enumerate(csl_list):
         try:
             item['id']
@@ -110,12 +115,21 @@ def make_csl_list(handles):
     csl_list = [handle.canonic().csl_dict().clean().minimal() for handle in handles]
     return add_missing_ids(csl_list)
 
+def assert_list_type(xs, cls): # mimicing type system
+    if not isinstance(xs, list):
+        raise TypeError('Expected <list> instead of {}'.format(type(xs))) 
+    for x in xs:
+        if not isinstance(x, cls):
+            raise TypeError('Expected type {} for {}'.format(cls, x)) 
+
 def bibliography(handles: List[Handle], csl_style=None) -> str:
+    assert_list_type(handles, Handle)
     csl_list = make_csl_list(handles)
     return bibliography_csl(csl_list, csl_style)
 
 
 def bibliography_csl(csl_list: List[CSL_Dict], csl_style):
+    assert_list_type(csl_list, CSL_Dict)
     input_str = to_metadata(csl_list, csl_style)
     output = call_pandoc(input_str)
     if output.returncode == 0:
@@ -126,14 +140,15 @@ def bibliography_csl(csl_list: List[CSL_Dict], csl_style):
 
 
 def process_text_to_bibliography(text, csl_style=None, output_format='plain'):
+    """
+    Return bibliography list form text with @citekeys or citekeys without @.
+    """
     citekeys = text_to_citekey_strings(text)
     return main(citekeys, csl_style, output_format)
 
 
 def main(citekey_strings, csl_style=None, output_format='plain'):
-    """
-    Return bibliography list form text with @citekeys or citekeys without @.
-    """
+
     handles = [CiteKey(c).handle() for c in citekey_strings]
     return bibliography(handles, csl_style)
 
@@ -148,7 +163,7 @@ def make_json(citekey_strings):
 
 if __name__ == '__main__':
     args = docopt("""
-    Usage: mcite.py [--from-file FILE | ARGS...] [--render --format FORMAT] [--debug-args]
+    Usage: mcite.py [--from-file FILE | ARGS...] [--render [--format FORMAT]] [--debug-args]
     """)
     if args['FILE']:
         text = open(args['FILE']).read()

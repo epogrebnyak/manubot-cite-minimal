@@ -1,3 +1,18 @@
+-------
+
+setup.py:
+    
+```	
+	# Create command line script
+    entry_points={
+        'console_scripts': [
+            'manubot = manubot.command:main',
+        ],
+    },
+```	
+
+-------
+
 Things learned - CSL related:
 
   - CSL output of Crossref is too dirty for pandoc citeproc, must be
@@ -6,6 +21,8 @@ Things learned - CSL related:
     'nocite': '@*'
   - Uspekhi Fizicheskih Nauk has articles from first issue in 1918 online!
     with DOI references!
+
+----------
 
 Things learned - other implementation:
 

@@ -34,7 +34,9 @@ def split_prefixed_identifier(string: str):
         source, identifier = trimmed.split(':', 1)
     except ValueError:
         raise CitekeyParsingError(f"Could not process '{string}' as citekey.")
-    constructor(source)  # will raise error on wrong prefix
+    source = source.strip()
+    identifier = identifier.strip()
+    constructor(source)  # raises error on wrong prefix
     return source, identifier
 
 
