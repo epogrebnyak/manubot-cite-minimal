@@ -1,6 +1,6 @@
 import subprocess
 
-# See also calls.bat for inputs
+# See also calls.bat for call options 
 
 doc = """
 doi:10.1038/171737a0
