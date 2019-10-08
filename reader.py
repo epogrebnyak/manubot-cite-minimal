@@ -11,11 +11,10 @@ def extract_citekeys(text: str):
 
 def extract_citekeys_by_line(text: str):
     result = []
-    for line in text.split('\n'):
-        line.strip()
+    for line in text.split('\n'):        
         # very permissive - allow everything with a colon to be evaluated
         if ':' in line:
-            result.append(line)
+            result.append(line.strip())
     return result        
 
 
